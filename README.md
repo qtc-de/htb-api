@@ -73,3 +73,5 @@ variable with name ``$IP``. If this is set up correctly, you can omit the machin
 ----
 
 Currently, HTB does not expose any API documentation. The API endpoint descriptions were taken from [this repository](https://github.com/sp1ral-vx/hackthebox-api).
+
+Copyright 2020, Tobias Neitzel and the *htb-api* contributors.
