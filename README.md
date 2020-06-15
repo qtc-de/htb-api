@@ -45,6 +45,18 @@ $ ./htb-api.py --store
 [+] Credentials stored.
 ```
 
+By default, the script uses your default keyring. If this is not desired, the script includes two parameters right at the
+start:
+
+```python
+use_default = True
+keyring_name = 'login'
+```
+
+When setting ``use_default`` to ``False``, the script will use a keyring with the name specified in ``keyring_name``. If this
+keyring does not already exist, it tries to create it.
+
+
 ### Usage
 
 ----
