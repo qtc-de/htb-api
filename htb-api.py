@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import re
+import sys
 import shlex
 import base64
 import os, sys
@@ -15,20 +16,79 @@ from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
 
-def keyring_store(api_key, lab_id):
+use_default = True
+keyring_name = 'login'
+
+
+def get_keyring(use_default, keyring_name):
+    '''
+    Returns a Secret.Collection object (keyring) and unlocks it if necessary. If {use_default}
+    is set to True, the function will attempt to use the default keyring. If no default keyring
+    is present, it creates a keyring {keyring_name} and sets it the default. If {use_default} is
+    false, the function will attempt to open the keyring {keyring_name} and creates it if it not
+    already exists.
+
+    Parameters:
+        use_default             (boolean)               Whether to use the default keyring or not
+        keyring_name            (string)                Name of the desired keyring
+
+    Returns:
+        collection              (Secret.Collection)     Keyring object.
+    '''
+    service = Secret.Service.get_sync(Secret.ServiceFlags.OPEN_SESSION | Secret.ServiceFlags.LOAD_COLLECTIONS)
+
+    if use_default:
+
+        default = Secret.Collection.for_alias_sync(service, "default", Secret.CollectionCreateFlags.NONE, None)
+        if default:
+            if default.get_locked():
+                service.unlock_sync([default], None)
+            return default
+
+    else:
+
+        collections = service.get_collections()
+        for collection in collections:
+            if collection.get_label() == keyring_name:
+                if collection.get_locked():
+                    service.unlock_sync([collection], None)
+                return collection
+
+    print(f"[+] No suitable keyring found.")
+    print(f"[+] Creating keyring '{keyring_name}'... ", end='', flush=True)
+
+    try:
+        if use_default:
+            collection = Secret.Collection.create_sync(service, keyring_name, "default", Secret.CollectionCreateFlags.NONE, None)
+        else:
+            collection = Secret.Collection.create_sync(service, keyring_name, None, Secret.CollectionCreateFlags.NONE, None)
+    except:
+        print("failed.")
+        print(f"[-] Unable to continue without a keyring.")
+        sys.exit(1)
+
+    print("done.")
+    return collection
+
+
+def keyring_store(api_key, lab_id, collection):
     '''
     Stores your HTB API key and your HTB VPN lab identifier inside the gnomekeyring.
 
     Parameters:
-        api_key             (string)            HTB API key.
-        lab_id              (string)            HTB VPN lab identifier.
+        api_key             (string)                HTB API key.
+        lab_id              (string)                HTB VPN lab identifier.
+        collection          (Secret.Collection)     Keyring where the secrets are stored
 
     Returns:
-        boolean             (boolean)           True or False.
+        boolean             (boolean)               True or False.
     '''
     HTB = Secret.Schema.new("htb.api.Store", Secret.SchemaFlags.NONE, {"name": Secret.SchemaAttributeType.STRING})
-    result = Secret.password_store_sync(HTB, {"name":"htb_api_key"}, Secret.COLLECTION_DEFAULT, "HTB API Key", api_key, None)
-    result2 = Secret.password_store_sync(HTB, {"name":"htb_vpn_lab"}, Secret.COLLECTION_DEFAULT, "HTB VPN LAB", lab_id, None)
+
+    collection_path = '/org/freedesktop/secrets/collection/' + collection.get_label()
+    result = Secret.password_store_sync(HTB, {"name":"htb_api_key"}, collection_path, "HTB API Key", api_key, None)
+    result2 = Secret.password_store_sync(HTB, {"name":"htb_vpn_lab"}, collection_path, "HTB VPN LAB", lab_id, None)
+
     return result and result2
 
 
@@ -336,6 +396,8 @@ parser.add_argument('--store', action='store_true', dest='store', help='store AP
 parser.add_argument('--retrieve', action='store_true', dest='retrieve', help='display API key stored inside gnome keyring')
 args = parser.parse_args()
 
+collection = get_keyring(use_default, keyring_name)
+
 if args.store:
 
     try:
@@ -345,11 +407,11 @@ if args.store:
         print('[-] Aborted.')
         sys.exit(1)
 
-    if keyring_store(api_key, vpn_lab):
+    if keyring_store(api_key, vpn_lab, collection):
         print("[+] Credentials stored.")
         sys.exit(0)
 
-    print("[-] Failed.")
+    print("[-] Storing credentials failed.")
     sys.exit(1)
 
 api_key,vpn_lab = keyring_retrieve()
